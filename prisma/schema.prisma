@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// ==========================================
+// 1. CORE AUTHENTICATION & ROLES
+// ==========================================
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+model User {
+  id               String   @id // Matches Supabase auth.users.id
+  email            String   @unique
+  role             Role     @default(PATIENT)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Profile Links
+  patientProfile   Patient?
+  doctorProfile    Doctor?
+
+  // AI & System Links
+  chats            Chat[]
+  memories         MedicalMemory[]
+  pushSubscription PushSubscription?
+}
+
+// ==========================================
+// 2. PROFILES
+// ==========================================
+
+model Doctor {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName   String
+  lastName    String
+  specialty   String?  // e.g., "Cardiology"
+  clinicName  String?  @default("Nala Vita Central")
+  
+  // A doctor manages many patients and appointments
+  patients    Patient[]
+  appointments Appointment[]
+}
+
+model Patient {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Optional link to a Doctor (If null, they are an independent B2C user)
+  doctorId    String?
+  doctor      Doctor?  @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  
+  // Demographics
+  firstName   String
+  lastName    String?
+  dateOfBirth DateTime?
+  gender      String?
+  language    String   @default("English") // For AI translation (English, Yoruba, etc.)
+  
+  // Base Biometrics
+  heightCm    Float?
+  weightKg    Float?
+  bloodType   String?
+  genotype    String?
+  isPregnant  Boolean  @default(false)
+  
+  // High-level Medical Summaries (For quick AI context)
+  allergies   String?
+  conditions  String?
+  
+  // Relational Data
+  appointments Appointment[]
+  medications  Medication[]
+  labResults   LabResult[]
+  dailyLogs    DailyLog[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================================
+// 3. CLINICAL DATA (Records, Meds, Labs)
+// ==========================================
+
+model Medication {
+  id           String   @id @default(uuid())
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  name         String
+  dosage       String
+  frequency    String   // e.g., "Twice daily"
+  instructions String?
+  
+  type         String   @default("PRESCRIBED") // "PRESCRIBED" (by doctor) or "SELF_REPORTED" (by patient)
+  status       String   @default("ACTIVE")     // "ACTIVE" or "DISCONTINUED"
+  
+  createdAt    DateTime @default(now())
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  doctorId    String?
+  doctor      Doctor?  @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  doctorName  String?  // Fallback if doctor isn't in system
+  
+  date        DateTime
+  time        String
+  type        String   @default("Telehealth") // "Telehealth" or "In-Person"
+  location    String?
+  status      String   @default("Scheduled")  // "Scheduled", "Completed", "Cancelled"
+  notes       String?
+  
+  createdAt   DateTime @default(now())
+}
+
+model LabResult {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  title       String
+  date        DateTime @default(now())
+  orderedBy   String?
+  status      String   @default("Pending Review") // "Reviewed", "Action Required"
+  
+  aiSummary   String?  // Amelia's translation of the metrics
+  pdfUrl      String?  // Link to Supabase Storage
+  
+  markers     LabMarker[]
+  createdAt   DateTime @default(now())
+}
+
+model LabMarker {
+  id          String   @id @default(uuid())
+  labResultId String
+  labResult   LabResult @relation(fields: [labResultId], references: [id], onDelete: Cascade)
+  
+  name        String
+  value       String
+  unit        String
+  range       String
+  status      String   @default("normal") // "normal", "high", "low"
+}
+
+// ==========================================
+// 4. DAILY TRACKING & VITALS
+// ==========================================
+
+model DailyLog {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  date        String   // Stored as YYYY-MM-DD for easy querying
+  waterLiters Float    @default(0)
+  steps       Int      @default(0)
+  medsTaken   Boolean  @default(false)
+  
+  // Tracked Vitals
+  bloodPressure String? // e.g., "120/80"
+  heartRate     Int?    // e.g., 72
+  bloodSugar    Float?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([patientId, date]) // Ensures only one log per patient per day
+}
+
+// ==========================================
+// 5. AMELIA AI CHAT & MEMORY
+// ==========================================
+
+model Chat {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title       String
+  isPinned    Boolean   @default(false)
+  
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  chatId      String
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  
+  role        String   // "user", "assistant", "system"
+  content     String
+  imageUrl    String?  // If they uploaded a photo of a pill/wound
+  
+  createdAt   DateTime @default(now())
+}
+
+model MedicalMemory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  category    String   // "Diagnoses", "Medications", "Allergies", "Symptoms", "Vitals", "Lifestyle"
+  observation String   // E.g., "Patient reported a mild headache on Tuesday."
+  
+  createdAt   DateTime @default(now())
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
