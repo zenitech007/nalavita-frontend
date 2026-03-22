@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
-// ==========================================
-// 1. CORE AUTHENTICATION & ROLES
-// ==========================================
+//////////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////////
 
 enum Role {
   PATIENT
@@ -16,218 +16,287 @@ enum Role {
   ADMIN
 }
 
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+//////////////////////////////////////////////////////
+// ORGANIZATION (MULTI-TENANT / HOSPITAL SUPPORT)
+//////////////////////////////////////////////////////
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  doctors  Doctor[]
+  patients Patient[]
+}
+
+//////////////////////////////////////////////////////
+// CORE USER
+//////////////////////////////////////////////////////
+
 model User {
-  id               String   @id // Matches Supabase auth.users.id
-  email            String   @unique
-  role             Role     @default(PATIENT)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id    String @id @db.Uuid // Matches Supabase auth.users.id
+  email String @unique
+  role  Role   @default(PATIENT)
 
-  // Profile Links
-  patientProfile   Patient?
-  doctorProfile    Doctor?
+  patientProfile Patient?
+  doctorProfile  Doctor?
 
-  // AI & System Links
   chats            Chat[]
   memories         MedicalMemory[]
   pushSubscription PushSubscription?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// ==========================================
-// 2. PROFILES
-// ==========================================
+//////////////////////////////////////////////////////
+// PROFILES
+//////////////////////////////////////////////////////
 
 model Doctor {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  firstName   String
-  lastName    String
-  specialty   String?  // e.g., "Cardiology"
-  clinicName  String?  @default("Nala Vita Central")
-  
-  // A doctor manages many patients and appointments
-  patients    Patient[]
+  id     String @id @default(uuid())
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  firstName  String
+  lastName   String
+  specialty  String?
+  clinicName String? @default("Nala Vita Central")
+
+  patients     Patient[]
   appointments Appointment[]
 }
 
 model Patient {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Optional link to a Doctor (If null, they are an independent B2C user)
-  doctorId    String?
-  doctor      Doctor?  @relation(fields: [doctorId], references: [id], onDelete: SetNull)
-  
-  // Demographics
+  id     String @id @default(uuid())
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  doctorId String?
+  doctor   Doctor? @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+
   firstName   String
   lastName    String?
   dateOfBirth DateTime?
   gender      String?
-  language    String   @default("English") // For AI translation (English, Yoruba, etc.)
-  
-  // Base Biometrics
-  heightCm    Float?
-  weightKg    Float?
-  bloodType   String?
-  genotype    String?
-  isPregnant  Boolean  @default(false)
-  
-  // High-level Medical Summaries (For quick AI context)
-  allergies   String?
-  conditions  String?
-  
-  // Relational Data
-  appointments Appointment[]
-  medications  Medication[]
-  labResults   LabResult[]
-  dailyLogs    DailyLog[]
+  language    String    @default("English")
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  heightCm   Float?
+  weightKg   Float?
+  bloodType  String?
+  genotype   String?
+  isPregnant Boolean @default(false)
+
+  allergies  String[] // ARRAY (AI-friendly)
+  conditions String[] // ARRAY (AI-friendly)
+
+  appointments    Appointment[]
+  medications     Medication[]
+  labResults      LabResult[]
+  dailyLogs       DailyLog[]
+  medicalMemories MedicalMemory[] @relation("PatientMedicalMemories")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([doctorId])
+  @@index([organizationId])
 }
 
-// ==========================================
-// 3. CLINICAL DATA (Records, Meds, Labs)
-// ==========================================
+//////////////////////////////////////////////////////
+// CLINICAL DATA
+//////////////////////////////////////////////////////
 
 model Medication {
-  id           String   @id @default(uuid())
-  patientId    String
-  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
   name         String
   dosage       String
-  frequency    String   // e.g., "Twice daily"
+  frequency    String
   instructions String?
-  
-  type         String   @default("PRESCRIBED") // "PRESCRIBED" (by doctor) or "SELF_REPORTED" (by patient)
-  status       String   @default("ACTIVE")     // "ACTIVE" or "DISCONTINUED"
-  
-  createdAt    DateTime @default(now())
+
+  type   String @default("PRESCRIBED")
+  status String @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
 }
 
 model Appointment {
-  id          String   @id @default(uuid())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  
-  doctorId    String?
-  doctor      Doctor?  @relation(fields: [doctorId], references: [id], onDelete: SetNull)
-  doctorName  String?  // Fallback if doctor isn't in system
-  
-  date        DateTime
-  time        String
-  type        String   @default("Telehealth") // "Telehealth" or "In-Person"
-  location    String?
-  status      String   @default("Scheduled")  // "Scheduled", "Completed", "Cancelled"
-  notes       String?
-  
-  createdAt   DateTime @default(now())
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  doctorId   String?
+  doctor     Doctor? @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  doctorName String?
+
+  date     DateTime
+  time     String
+  type     String   @default("Telehealth")
+  location String?
+  status   String   @default("Scheduled")
+  notes    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@index([doctorId])
 }
 
 model LabResult {
-  id          String   @id @default(uuid())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  
-  title       String
-  date        DateTime @default(now())
-  orderedBy   String?
-  status      String   @default("Pending Review") // "Reviewed", "Action Required"
-  
-  aiSummary   String?  // Amelia's translation of the metrics
-  pdfUrl      String?  // Link to Supabase Storage
-  
-  markers     LabMarker[]
-  createdAt   DateTime @default(now())
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  title     String
+  date      DateTime @default(now())
+  orderedBy String?
+  status    String   @default("Pending Review")
+
+  aiSummary String?
+  pdfUrl    String?
+
+  markers LabMarker[]
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
 }
 
 model LabMarker {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   labResultId String
   labResult   LabResult @relation(fields: [labResultId], references: [id], onDelete: Cascade)
-  
-  name        String
-  value       String
-  unit        String
-  range       String
-  status      String   @default("normal") // "normal", "high", "low"
+
+  name   String
+  value  String
+  unit   String
+  range  String
+  status String @default("normal")
 }
 
-// ==========================================
-// 4. DAILY TRACKING & VITALS
-// ==========================================
+//////////////////////////////////////////////////////
+// DAILY TRACKING
+//////////////////////////////////////////////////////
 
 model DailyLog {
-  id          String   @id @default(uuid())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  
-  date        String   // Stored as YYYY-MM-DD for easy querying
-  waterLiters Float    @default(0)
-  steps       Int      @default(0)
-  medsTaken   Boolean  @default(false)
-  
-  // Tracked Vitals
-  bloodPressure String? // e.g., "120/80"
-  heartRate     Int?    // e.g., 72
-  bloodSugar    Float?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  @@unique([patientId, date]) // Ensures only one log per patient per day
+  date DateTime
+
+  waterLiters Float   @default(0)
+  steps       Int     @default(0)
+  medsTaken   Boolean @default(false)
+
+  bloodPressure String?
+  heartRate     Int?
+  bloodSugar    Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([patientId, date])
+  @@index([patientId, date])
 }
 
-// ==========================================
-// 5. AMELIA AI CHAT & MEMORY
-// ==========================================
+//////////////////////////////////////////////////////
+// AI CHAT SYSTEM
+//////////////////////////////////////////////////////
 
 model Chat {
-  id          String    @id @default(uuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  title       String
-  isPinned    Boolean   @default(false)
-  
-  messages    Message[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id     String @id @default(uuid())
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title    String
+  isPinned Boolean @default(false)
+
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Message {
-  id          String   @id @default(uuid())
-  chatId      String
-  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  
-  role        String   // "user", "assistant", "system"
-  content     String
-  imageUrl    String?  // If they uploaded a photo of a pill/wound
-  
-  createdAt   DateTime @default(now())
+  id     String @id @default(uuid())
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  role     MessageRole
+  content  String
+  imageUrl String?
+
+  createdAt DateTime @default(now())
 }
+
+//////////////////////////////////////////////////////
+// AI MEMORY (AMELIA CORE)
+//////////////////////////////////////////////////////
 
 model MedicalMemory {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  category    String   // "Diagnoses", "Medications", "Allergies", "Symptoms", "Vitals", "Lifestyle"
-  observation String   // E.g., "Patient reported a mild headache on Tuesday."
-  
-  createdAt   DateTime @default(now())
+  id     String @id @default(uuid())
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  patientId String?
+  patient   Patient? @relation("PatientMedicalMemories", fields: [patientId], references: [id])
+
+  category    String
+  observation String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, category])
+  @@index([patientId])
 }
 
+//////////////////////////////////////////////////////
+// PUSH NOTIFICATIONS
+//////////////////////////////////////////////////////
+
 model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String
-  p256dh    String
-  auth      String
+  id     String @id @default(uuid())
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String
+  p256dh   String
+  auth     String
+
   createdAt DateTime @default(now())
+}
+
+//////////////////////////////////////////////////////
+// AUDIT LOG (COMPLIANCE / TRACEABILITY)
+//////////////////////////////////////////////////////
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
 }

@@ -86,17 +86,27 @@ export default function PatientOnboarding() {
       const payload = {
         firstName: formData.firstName,
         lastName: formData.lastName,
-        dateOfBirth: formData.dob ? new Date(formData.dob).toISOString() : null,
+        dateOfBirth: formData.dob
+          ? new Date(formData.dob).toISOString()
+          : null,
         gender: formData.gender,
+
         heightCm: isNaN(heightCm) ? null : heightCm,
         weightKg: isNaN(weightKg) ? null : weightKg,
+
         bloodType: formData.bloodType || null,
         genotype: formData.genotype || null,
-        allergies: formData.allergies || null,
-        conditions: formData.conditions || null,
+
+        // ✅ FIXED FOR PRISMA ARRAY
+        allergies: formData.allergies
+          ? formData.allergies.split(',').map(a => a.trim())
+          : [],
+
+        conditions: formData.conditions
+          ? formData.conditions.split(',').map(c => c.trim())
+          : [],
+
         isPregnant: formData.isPregnant === 'Yes',
-        // Note: Phone, Address, and Next of Kin are kept in the UI but 
-        // excluded from the payload since we removed them from the minimal Prisma schema
       };
 
       const response = await fetch('/api/patients/me', {
@@ -211,7 +221,7 @@ export default function PatientOnboarding() {
                     <div><label className={labelClass}>Genotype</label><select value={formData.genotype} onChange={e => setFormData({ ...formData, genotype: e.target.value })} className={inputClass}><option value="">Unknown</option><option value="AA">AA</option><option value="AS">AS</option><option value="SS">SS</option></select></div>
                   </div>
                   <div className="space-y-4 pt-2">
-                    <div><label className={labelClass}>Known Allergies</label><input type="text" value={formData.allergies} onChange={e => setFormData({ ...formData, allergies: e.target.value })} className={inputClass} placeholder="e.g., Peanuts, Penicillin" /></div>
+                    <div><label className={labelClass}>Known Allergies</label><input type="text" value={formData.allergies} onChange={e => setFormData({ ...formData, allergies: e.target.value })} className={inputClass} placeholder="Separate with commas (e.g., Peanuts, Penicillin)" /></div>
                     <div><label className={labelClass}>Chronic Conditions</label><textarea value={formData.conditions} onChange={e => setFormData({ ...formData, conditions: e.target.value })} className={`${inputClass} resize-none h-20`} placeholder="Brief medical history..." /></div>
                   </div>
                   {formData.gender === 'Female' && (

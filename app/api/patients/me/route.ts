@@ -1,171 +1,144 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createClient } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
-// ==========================================
-// 🔐 AUTH HELPER (Robust)
-// ==========================================
-async function getAuthUser(request: Request) {
+// Server-side Supabase client (uses service role if available)
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY! // MUST be server-only
+);
+
+export async function GET(req: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
+        // ----------------------------------------
+        // 1. AUTH: Get user from Supabase JWT
+        // ----------------------------------------
+        const authHeader = req.headers.get('authorization');
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.warn('Missing or malformed Authorization header');
-            return null;
+        if (!authHeader) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const token = authHeader.split(' ')[1];
+        const token = authHeader.replace('Bearer ', '');
 
-        const supabase = createClient();
+        const {
+            data: { user },
+            error: authError,
+        } = await supabase.auth.getUser(token);
 
-        const { data, error } = await supabase.auth.getUser(token);
-
-        if (error) {
-            console.error('Supabase auth error:', error.message);
-            return null;
+        if (authError || !user) {
+            return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        return data?.user ?? null;
-    } catch (err) {
-        console.error('Auth parsing error:', err);
-        return null;
-    }
-}
-
-// ==========================================
-// 📥 GET: Fetch Dashboard Profile & Vitals
-// ==========================================
-export async function GET(request: Request) {
-    try {
-        const user = await getAuthUser(request);
-
-        if (!user) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
-        // 🔍 Try fetch patient
-        let patient = await prisma.patient.findUnique({
-            where: { userId: user.id },
+        // ----------------------------------------
+        // 2. FETCH PATIENT PROFILE
+        // ----------------------------------------
+        const patient = await prisma.patient.findUnique({
+            where: {
+                userId: user.id, // matches Supabase UUID
+            },
             include: {
-                medications: true,
-                dailyLogs: {
+                doctor: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        specialty: true,
+                        clinicName: true,
+                    },
+                },
+                organization: true,
+
+                medications: {
+                    where: { status: 'ACTIVE' },
                     orderBy: { createdAt: 'desc' },
-                    take: 1,
+                },
+
+                labResults: {
+                    orderBy: { date: 'desc' },
+                    include: {
+                        markers: true,
+                    },
+                },
+
+                appointments: {
+                    orderBy: { date: 'asc' },
+                    take: 5,
+                },
+
+                dailyLogs: {
+                    orderBy: { date: 'desc' },
+                    take: 7, // last 7 days
                 },
             },
         });
 
-        // 🧠 AUTO-CREATE FLOW (safe + atomic-like)
         if (!patient) {
-            console.log('No patient found. Creating new profile...');
-
-            // Ensure user exists in DB
-            await prisma.user.upsert({
-                where: { id: user.id },
-                update: {},
-                create: {
-                    id: user.id,
-                    email: user.email ?? 'unknown@email.com',
-                    role: 'PATIENT',
-                },
-            });
-
-            // Create patient profile
-            patient = await prisma.patient.create({
-                data: {
-                    userId: user.id,
-                    firstName: user.email?.split('@')[0] || 'Patient',
-                    lastName: '',
-                },
-                include: {
-                    medications: true,
-                    dailyLogs: true,
-                },
-            });
-        }
-
-        return NextResponse.json(
-            { success: true, data: patient },
-            { status: 200 }
-        );
-
-    } catch (error) {
-        console.error('GET /patients/me error:', error);
-
-        return NextResponse.json(
-            {
-                success: false,
-                error: 'Internal Server Error',
-            },
-            { status: 500 }
-        );
-    }
-}
-
-// ==========================================
-// ✏️ PATCH: Update Patient Profile (SAFE)
-// ==========================================
-export async function PATCH(request: Request) {
-    try {
-        const user = await getAuthUser(request);
-
-        if (!user) {
             return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
+                { error: 'Patient profile not found' },
+                { status: 404 }
             );
         }
 
-        const body = await request.json();
-
-        // 🛡️ Use UPSERT to avoid crashes
-        const patient = await prisma.patient.upsert({
-            where: { userId: user.id },
-            update: {
-                firstName: body.firstName,
-                lastName: body.lastName,
-                dateOfBirth: body.dateOfBirth,
-                gender: body.gender,
-                heightCm: body.heightCm,
-                weightKg: body.weightKg,
-                bloodType: body.bloodType,
-                genotype: body.genotype,
-                allergies: body.allergies,
-                conditions: body.conditions,
-                isPregnant: body.isPregnant,
+        // ----------------------------------------
+        // 3. FETCH AI MEMORY (IMPORTANT)
+        // ----------------------------------------
+        const memories = await prisma.medicalMemory.findMany({
+            where: {
+                OR: [
+                    { userId: user.id },
+                    { patientId: patient.id },
+                ],
             },
-            create: {
-                userId: user.id,
-                firstName: body.firstName || 'Patient',
-                lastName: body.lastName || '',
-                dateOfBirth: body.dateOfBirth,
-                gender: body.gender,
-                heightCm: body.heightCm,
-                weightKg: body.weightKg,
-                bloodType: body.bloodType,
-                genotype: body.genotype,
-                allergies: body.allergies,
-                conditions: body.conditions,
-                isPregnant: body.isPregnant,
-            },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
         });
 
-        return NextResponse.json(
-            { success: true, data: patient },
-            { status: 200 }
-        );
+        // ----------------------------------------
+        // 4. SHAPE RESPONSE (AI + UI READY)
+        // ----------------------------------------
+        const response = {
+            profile: {
+                id: patient.id,
+                firstName: patient.firstName,
+                lastName: patient.lastName,
+                gender: patient.gender,
+                dateOfBirth: patient.dateOfBirth,
+                language: patient.language,
 
-    } catch (error) {
-        console.error('PATCH /patients/me error:', error);
+                heightCm: patient.heightCm,
+                weightKg: patient.weightKg,
+                bloodType: patient.bloodType,
+                genotype: patient.genotype,
+                isPregnant: patient.isPregnant,
 
-        return NextResponse.json(
-            {
-                success: false,
-                error: 'Internal Server Error',
+                allergies: patient.allergies,
+                conditions: patient.conditions,
             },
+
+            careTeam: patient.doctor
+                ? {
+                    doctor: patient.doctor,
+                    organization: patient.organization,
+                }
+                : null,
+
+            medications: patient.medications,
+            labResults: patient.labResults,
+            appointments: patient.appointments,
+            dailyLogs: patient.dailyLogs,
+
+            aiContext: {
+                memories,
+            },
+        };
+
+        return NextResponse.json(response);
+    } catch (error) {
+        console.error('[PATIENT_ME_ERROR]', error);
+
+        return NextResponse.json(
+            { error: 'Internal Server Error' },
             { status: 500 }
         );
     }

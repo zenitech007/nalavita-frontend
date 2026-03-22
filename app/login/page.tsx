@@ -41,9 +41,7 @@ export default function AuthPage() {
 
     try {
       if (isLogin) {
-        // ==============================
-        // 1. LOG IN EXISTING USER
-        // ==============================
+        // LOGIN
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -51,67 +49,52 @@ export default function AuthPage() {
 
         if (error) throw error;
 
-        // --- STRICT LOGIN SEPARATION ---
-        // Check their securely stamped role from Supabase metadata
         const userRole = data.user.user_metadata?.role;
 
         if (userRole && userRole !== dbRole) {
-          // If they chose the wrong tab, immediately sign them out and block them
           await supabase.auth.signOut();
-          throw new Error(`Access Denied: You are registered as a ${userRole}. Please select the correct portal tab above.`);
+          throw new Error(
+            `Access Denied: You are registered as a ${userRole}`
+          );
         }
 
-        // Route them correctly
-        if (dbRole === 'DOCTOR') {
-          router.push('/dashboard');
-        } else {
-          router.push('/patient-portal');
-        }
-
+        router.push(dbRole === 'DOCTOR' ? '/dashboard' : '/patient-portal');
       } else {
-        // ==============================
-        // 2. SIGN UP NEW USER
-        // ==============================
+        // SIGNUP
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: {
-              role: dbRole // Securely stamp their role into Supabase auth
-            }
-          }
+            data: { role: dbRole },
+          },
         });
 
         if (error) throw error;
 
-        if (data.user) {
-          // Sync to our new Prisma Database via an API route
-          const res = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: data.user.id,
-              email: data.user.email,
-              role: dbRole,
-              // Only send these if it's a doctor (matches Doctor schema)
-              firstName: dbRole === 'DOCTOR' ? firstName : undefined,
-              lastName: dbRole === 'DOCTOR' ? lastName : undefined,
-              clinicName: dbRole === 'DOCTOR' ? clinicName : undefined
-            })
-          });
+        if (!data.user) throw new Error('User creation failed');
 
-          if (!res.ok) throw new Error("Failed to sync account to database. Please try again.");
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: data.user.id,
+            email: data.user.email,
+            role: dbRole,
+            firstName,
+            lastName,
+            clinicName,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Database sync failed');
         }
 
-        if (dbRole === 'DOCTOR') {
-          router.push('/dashboard');
-        } else {
-          router.push('/onboarding');
-        }
+        router.push(dbRole === 'DOCTOR' ? '/dashboard' : '/onboarding');
       }
-    } catch (error: any) {
-      console.error(error);
-      setAuthError(error.message || "An error occurred during authentication.");
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication failed');
     } finally {
       setIsLoading(false);
     }

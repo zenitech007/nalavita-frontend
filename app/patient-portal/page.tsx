@@ -27,11 +27,16 @@ export default function PatientDashboard() {
     const [isLive, setIsLive] = useState(true);
 
     useEffect(() => {
-        // 🔒 Onboarding Guard (if user is loaded and missing data)
+        // --- THE BOUNCER FIX ---
+        // If they are missing vital setup info, force them to the onboarding page!
         if (!isLoading && patient) {
             if (!patient.heightCm || !patient.weightKg || !patient.gender) {
                 router.push('/onboarding');
+                return; // Stop rendering the dashboard
             }
+
+            // Mocking a health score based on completeness of profile
+            setHealthScore(92);
         }
     }, [isLoading, patient, router]);
 
