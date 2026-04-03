@@ -1,0 +1,46 @@
+{
+  "diseases": {
+    "malaria": {
+      "symptoms": ["fever", "chills", "headache", "muscle_aches", "fatigue"],
+      "recommended_tests": ["blood_smear", "rapid_diagnostic_test", "PCR"],
+      "treatment_class": "antimalarial",
+      "regional_relevance": ["West Africa", "Sub-Saharan Africa"]
+    },
+    "typhoid": {
+      "symptoms": ["fever", "headache", "weakness", "abdominal_pain", "rose_spots"],
+      "recommended_tests": ["blood_culture", "Widal_test", "stool_culture"],
+      "treatment_class": "antibiotics",
+      "regional_relevance": ["West Africa", "South Asia"]
+    },
+    "dengue": {
+      "symptoms": ["high_fever", "headache", "muscle_pain", "rash", "joint_pain"],
+      "recommended_tests": ["NS1_antigen", "serology", "PCR"],
+      "treatment_class": "supportive_care",
+      "regional_relevance": ["Tropical regions"]
+    },
+    "diabetes": {
+      "symptoms": ["increased_thirst", "frequent_urination", "fatigue", "blurred_vision"],
+      "recommended_tests": ["fasting_glucose", "HbA1c", "oral_glucose_tolerance"],
+      "treatment_class": "antidiabetic",
+      "regional_relevance": ["Global"]
+    },
+    "hypertension": {
+      "symptoms": ["headache", "dizziness", "chest_discomfort", "shortness_of_breath"],
+      "recommended_tests": ["blood_pressure", "ECG", "renal_function"],
+      "treatment_class": "antihypertensive",
+      "regional_relevance": ["Global"]
+    },
+    "pneumonia": {
+      "symptoms": ["cough", "fever", "chest_pain", "difficulty_breathing"],
+      "recommended_tests": ["chest_xray", "sputum_culture", "blood_culture"],
+      "treatment_class": "antibiotics",
+      "regional_relevance": ["Global"]
+    },
+    "asthma": {
+      "symptoms": ["shortness_of_breath", "wheezing", "cough", "chest_tightness"],
+      "recommended_tests": ["spirometry", "peak_flow", "allergy_testing"],
+      "treatment_class": "bronchodilators",
+      "regional_relevance": ["Global"]
+    }
+  }
+}

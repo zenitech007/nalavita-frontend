@@ -1,0 +1,43 @@
+{
+  "interactions": [
+    {
+      "drug_a": "warfarin",
+      "drug_b": "aspirin",
+      "severity": "high",
+      "warning": "Increased bleeding risk with concurrent use of warfarin and aspirin"
+    },
+    {
+      "drug_a": "metformin",
+      "drug_b": "contrast_dye",
+      "severity": "high",
+      "warning": "Risk of lactic acidosis with metformin and contrast dye"
+    },
+    {
+      "drug_a": "lisinopril",
+      "drug_b": "potassium_supplements",
+      "severity": "high",
+      "warning": "Hyperkalemia risk with ACE inhibitor and potassium supplements"
+    },
+    {
+      "drug_a": "simvastatin",
+      "drug_b": "erythromycin",
+      "severity": "moderate",
+      "warning": "Increased statin levels with macrolide antibiotics"
+    },
+    {
+      "drug_a": "amoxicillin",
+      "drug_b": "birth_control",
+      "severity": "moderate",
+      "warning": "Reduced efficacy of oral contraceptives with antibiotics"
+    }
+  ],
+  "allergy_classes": [
+    "penicillin",
+    "cephalosporin",
+    "sulfonamides",
+    "nsaid",
+    "acei",
+    "beta_blockers",
+    "statins"
+  ]
+}

@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    turbopack: false,
+  webpack: (config, { isServer }) => {
+    return config;
   },
 };
 

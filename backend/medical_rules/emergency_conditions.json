@@ -1,0 +1,46 @@
+{
+  "emergencies": [
+    {
+      "name": "myocardial_infarction",
+      "symptoms": ["chest_pain", "shortness_of_breath", "sweating"],
+      "response": "Call emergency services immediately",
+      "severity": "critical"
+    },
+    {
+      "name": "stroke",
+      "symptoms": ["face_drooping", "arm_weakness", "slurred_speech"],
+      "response": "Call emergency services immediately - time is critical",
+      "severity": "critical"
+    },
+    {
+      "name": "severe_allergic_reaction",
+      "symptoms": ["difficulty_breathing", "throat_tightness", "rapid_heartbeat"],
+      "response": "Administer epinephrine and call emergency services",
+      "severity": "critical"
+    },
+    {
+      "name": "severe_bleeding",
+      "symptoms": ["severe_bleeding", "blood_loss", "shock_symptoms"],
+      "response": "Apply pressure and call emergency services",
+      "severity": "critical"
+    },
+    {
+      "name": "sepsis",
+      "symptoms": ["high_fever", "rapid_heartbeat", "confusion", "low_blood_pressure"],
+      "response": "Seek immediate medical attention",
+      "severity": "critical"
+    },
+    {
+      "name": "diabetic_ketoacidosis",
+      "symptoms": ["nausea", "fruity_breath", "rapid_breathing", "confusion"],
+      "response": "Seek immediate medical attention",
+      "severity": "critical"
+    },
+    {
+      "name": "seizure",
+      "symptoms": ["seizures", "loss_of_consciousness", "convulsions"],
+      "response": "Protect from injury and call emergency services",
+      "severity": "critical"
+    }
+  ]
+}
